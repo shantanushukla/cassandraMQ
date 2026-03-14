@@ -21,6 +21,7 @@ public final class PreparedStatementRegistry {
     private final PreparedStatement requeueRunningMessage;
     private final PreparedStatement scheduleRetry;
     private final PreparedStatement acquireShardLease;
+    private final PreparedStatement acquireShardLeaseIfAbsent;
     private final PreparedStatement renewShardLease;
     private final PreparedStatement releaseShardLease;
     private final PreparedStatement selectShardOwnershipByQueue;
@@ -105,7 +106,16 @@ public final class PreparedStatementRegistry {
                         .setColumn("lease_expiry", bindMarker())
                         .whereColumn("queue_name").isEqualTo(bindMarker())
                         .whereColumn("shard_id").isEqualTo(bindMarker())
-                        .ifRaw("lease_expiry < toTimestamp(now()) OR lease_expiry = null")
+                        .ifRaw("lease_expiry < toTimestamp(now())")
+                        .build());
+
+        this.acquireShardLeaseIfAbsent = session.prepare(
+                insertInto("shard_ownership")
+                        .value("queue_name", bindMarker())
+                        .value("shard_id", bindMarker())
+                        .value("worker_id", bindMarker())
+                        .value("lease_expiry", bindMarker())
+                        .ifNotExists()
                         .build());
 
         this.renewShardLease = session.prepare(

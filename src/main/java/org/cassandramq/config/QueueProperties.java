@@ -62,12 +62,9 @@ public final class QueueProperties {
         p.putAll(baseProperties);
 
         CassandraConfig cassandra = new CassandraConfig(
-                get(p, "cassandramq.cassandra.contact-points"),
-                getInt(p, "cassandramq.cassandra.port"),
-                get(p, "cassandramq.cassandra.local-datacenter"),
-                get(p, "cassandramq.cassandra.keyspace"),
-                get(p, "cassandramq.cassandra.username", ""),
-                get(p, "cassandramq.cassandra.password", ""),
+                get(p, "cassandramq.cassandra.secure-connect-bundle-path", ""),
+                get(p, "cassandramq.cassandra.client-id", ""),
+                get(p, "cassandramq.cassandra.client-secret", ""),
                 Duration.ofMillis(getInt(p, "cassandramq.cassandra.connect-timeout-ms")),
                 Duration.ofMillis(getInt(p, "cassandramq.cassandra.request-timeout-ms")),
                 getInt(p, "cassandramq.cassandra.max-requests-per-connection"),
@@ -130,16 +127,6 @@ public final class QueueProperties {
     }
 
     public void validate() {
-        if (cassandra.contactPoints().isBlank()) {
-            throw new IllegalArgumentException("cassandramq.cassandra.contact-points is required");
-        }
-        requirePositive(cassandra.port(), "cassandra.port");
-        if (cassandra.localDatacenter().isBlank()) {
-            throw new IllegalArgumentException("cassandramq.cassandra.local-datacenter is required");
-        }
-        if (cassandra.keyspace().isBlank()) {
-            throw new IllegalArgumentException("cassandramq.cassandra.keyspace is required");
-        }
         requirePositive(queue.totalShards(), "queue.total-shards");
         requirePositive(queue.bucketSizeSeconds(), "queue.bucket-size-seconds");
         requirePositive(queue.maxOwnedShards(), "queue.max-owned-shards");
@@ -239,12 +226,9 @@ public final class QueueProperties {
     }
 
     public record CassandraConfig(
-            String contactPoints,
-            int port,
-            String localDatacenter,
-            String keyspace,
-            String username,
-            String password,
+            String secureConnectBundlePath,
+            String clientId,
+            String clientSecret,
             Duration connectTimeout,
             Duration requestTimeout,
             int maxRequestsPerConnection,

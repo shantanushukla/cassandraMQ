@@ -20,9 +20,15 @@ public final class ShardOwnershipRepository implements ShardOwnershipStore {
 
     @Override
     public boolean tryAcquire(String queueName, int shardId, String workerId, Instant leaseExpiry) {
-        BoundStatement bs = statements.acquireShardLease().bind(workerId, leaseExpiry, queueName, shardId);
-        Row row = session.execute(bs).one();
-        return row != null && row.getBoolean("[applied]");
+        BoundStatement updateExpired = statements.acquireShardLease().bind(workerId, leaseExpiry, queueName, shardId);
+        Row updated = session.execute(updateExpired).one();
+        if (updated != null && updated.getBoolean("[applied]")) {
+            return true;
+        }
+
+        BoundStatement insertIfAbsent = statements.acquireShardLeaseIfAbsent().bind(queueName, shardId, workerId, leaseExpiry);
+        Row inserted = session.execute(insertIfAbsent).one();
+        return inserted != null && inserted.getBoolean("[applied]");
     }
 
     @Override

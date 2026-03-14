@@ -17,7 +17,6 @@ import org.cassandramq.store.ShardOwnershipRepository;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Properties;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -35,7 +34,7 @@ class CassandraRepositoryIT {
         Assumptions.assumeTrue(Boolean.getBoolean("cassandramq.it.enabled"),
                 "Set -Dcassandramq.it.enabled=true and run with -Pit to execute Cassandra integration tests");
 
-        properties = QueueProperties.from(baseProperties());
+        properties = QueueProperties.loadDefault();
         session = CassandraSessionFactory.create(properties);
         SchemaValidator.validateRequiredTables(session);
         PreparedStatementRegistry statements = new PreparedStatementRegistry(session);
@@ -94,56 +93,5 @@ class CassandraRepositoryIT {
 
         boolean released = ownershipRepository.release(queue, 8, "it-worker");
         assertTrue(released);
-    }
-
-    private static Properties baseProperties() {
-        Properties p = new Properties();
-        p.setProperty("cassandramq.cassandra.contact-points", System.getProperty("cassandramq.cassandra.contact-points", "127.0.0.1"));
-        p.setProperty("cassandramq.cassandra.port", System.getProperty("cassandramq.cassandra.port", "9042"));
-        p.setProperty("cassandramq.cassandra.local-datacenter", System.getProperty("cassandramq.cassandra.local-datacenter", "datacenter1"));
-        p.setProperty("cassandramq.cassandra.keyspace", System.getProperty("cassandramq.cassandra.keyspace", "cassandra_mq"));
-        p.setProperty("cassandramq.cassandra.username", System.getProperty("cassandramq.cassandra.username", ""));
-        p.setProperty("cassandramq.cassandra.password", System.getProperty("cassandramq.cassandra.password", ""));
-        p.setProperty("cassandramq.cassandra.connect-timeout-ms", "5000");
-        p.setProperty("cassandramq.cassandra.request-timeout-ms", "3000");
-        p.setProperty("cassandramq.cassandra.max-requests-per-connection", "1024");
-        p.setProperty("cassandramq.cassandra.ssl-enabled", "false");
-
-        p.setProperty("cassandramq.queue.total-shards", "64");
-        p.setProperty("cassandramq.queue.bucket-size-seconds", "10");
-        p.setProperty("cassandramq.queue.default-queue", System.getProperty("cassandramq.queue.default-queue", "default"));
-        p.setProperty("cassandramq.queue.worker-id", "it-worker");
-        p.setProperty("cassandramq.queue.max-owned-shards", "64");
-        p.setProperty("cassandramq.queue.target-owned-shards", "16");
-        p.setProperty("cassandramq.queue.shard-lease-duration-seconds", "30");
-        p.setProperty("cassandramq.queue.shard-lease-renew-interval-seconds", "10");
-        p.setProperty("cassandramq.queue.shard-rebalance-interval-seconds", "30");
-
-        p.setProperty("cassandramq.poll.interval-ms", "100");
-        p.setProperty("cassandramq.poll.batch-size", "200");
-        p.setProperty("cassandramq.poll.max-buckets-per-shard", "2");
-        p.setProperty("cassandramq.poll.pause-inflight-threshold-percent", "90");
-
-        p.setProperty("cassandramq.claim.task-lease-duration-seconds", "30");
-        p.setProperty("cassandramq.claim.max-claim-attempts-per-cycle", "10");
-
-        p.setProperty("cassandramq.execution.thread-pool-size", "2");
-        p.setProperty("cassandramq.execution.max-inflight-tasks", "100");
-        p.setProperty("cassandramq.execution.shutdown-wait-seconds", "2");
-
-        p.setProperty("cassandramq.retry.max-attempts", "3");
-        p.setProperty("cassandramq.retry.backoff-sequence", "PT1S,PT5S,PT30S");
-        p.setProperty("cassandramq.retry.jitter-percent", "0");
-
-        p.setProperty("cassandramq.metrics.enabled", "false");
-        p.setProperty("cassandramq.metrics.prometheus-enabled", "false");
-        p.setProperty("cassandramq.metrics.namespace", "cassandramq");
-        p.setProperty("cassandramq.metrics.lag-scan-interval-seconds", "15");
-
-        p.setProperty("cassandramq.runtime.startup-acquire-timeout-seconds", "20");
-        p.setProperty("cassandramq.runtime.health-check-interval-seconds", "10");
-        p.setProperty("cassandramq.runtime.enable-lease-recovery", "true");
-        p.setProperty("cassandramq.runtime.recovery-lookback-buckets", "3");
-        return p;
     }
 }

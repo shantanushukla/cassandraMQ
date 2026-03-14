@@ -62,10 +62,9 @@ class DefaultCassandraQueueProducerTest {
 
     private static QueueProperties properties() {
         Properties p = new Properties();
-        p.setProperty("cassandramq.cassandra.contact-points", "127.0.0.1");
-        p.setProperty("cassandramq.cassandra.port", "9042");
-        p.setProperty("cassandramq.cassandra.local-datacenter", "datacenter1");
-        p.setProperty("cassandramq.cassandra.keyspace", "cassandra_mq");
+        p.setProperty("cassandramq.cassandra.secure-connect-bundle-path", "/tmp/secure-connect-test-cluster.zip");
+        p.setProperty("cassandramq.cassandra.client-id", "client-id");
+        p.setProperty("cassandramq.cassandra.client-secret", "client-secret");
         p.setProperty("cassandramq.cassandra.username", "");
         p.setProperty("cassandramq.cassandra.password", "");
         p.setProperty("cassandramq.cassandra.connect-timeout-ms", "5000");

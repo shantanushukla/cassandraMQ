@@ -6,7 +6,7 @@ import com.datastax.oss.driver.api.core.config.DefaultDriverOption;
 import com.datastax.oss.driver.api.core.config.DriverConfigLoader;
 import org.cassandramq.config.QueueProperties;
 
-import java.net.InetSocketAddress;
+import java.nio.file.Paths;
 
 public final class CassandraSessionFactory {
     private CassandraSessionFactory() {
@@ -21,17 +21,19 @@ public final class CassandraSessionFactory {
                 .withInt(DefaultDriverOption.CONNECTION_POOL_LOCAL_SIZE, 1)
                 .build();
 
-        CqlSessionBuilder builder = CqlSession.builder()
-                .withLocalDatacenter(cfg.localDatacenter())
-                .withKeyspace(cfg.keyspace())
-                .withConfigLoader(loader);
-        for (String host : cfg.contactPoints().split(",")) {
-            builder.addContactPoint(new InetSocketAddress(host.trim(), cfg.port()));
+        if (cfg.secureConnectBundlePath().isBlank()) {
+            throw new IllegalArgumentException("cassandramq.cassandra.secure-connect-bundle-path is required");
+        }
+        if (cfg.clientId().isBlank() || cfg.clientSecret().isBlank()) {
+            throw new IllegalArgumentException("Cassandra cloud auth is required: set cassandramq.cassandra.client-id and cassandramq.cassandra.client-secret");
         }
 
-        if (!cfg.username().isBlank()) {
-            builder.withAuthCredentials(cfg.username(), cfg.password());
-        }
+        CqlSessionBuilder builder = CqlSession.builder()
+                .withCloudSecureConnectBundle(Paths.get(cfg.secureConnectBundlePath()))
+                .withAuthCredentials(cfg.clientId(), cfg.clientSecret())
+                .withKeyspace("cassandra_mq")
+                .withConfigLoader(loader);
+
         return builder.build();
     }
 }
