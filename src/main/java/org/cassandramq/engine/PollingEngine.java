@@ -22,6 +22,7 @@ public final class PollingEngine {
     private final ClaimDispatcher claimEngine;
     private final QueueMetrics metrics;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("mq-poll"));
+    private final ScheduledExecutorService lagScheduler = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("mq-lag"));
 
     public PollingEngine(
             QueueProperties properties,
@@ -44,43 +45,81 @@ public final class PollingEngine {
                 properties.poll().interval().toMillis(),
                 TimeUnit.MILLISECONDS
         );
+        lagScheduler.scheduleWithFixedDelay(
+                this::runLagScanCycle,
+                properties.metrics().lagScanInterval().toMillis(),
+                properties.metrics().lagScanInterval().toMillis(),
+                TimeUnit.MILLISECONDS
+        );
     }
 
     public void stop() {
         scheduler.shutdownNow();
+        lagScheduler.shutdownNow();
     }
 
     void runCycle(MessageHandler handler) {
-        metrics.incrementPollCycles();
-        int threshold = (properties.execution().maxInflightTasks() * properties.poll().pauseInflightThresholdPercent()) / 100;
-        if (metrics.inflightTasks() >= threshold) {
-            return;
+        long started = System.nanoTime();
+        try {
+            metrics.incrementPollCycles();
+            int threshold = (properties.execution().maxInflightTasks() * properties.poll().pauseInflightThresholdPercent()) / 100;
+            if (metrics.inflightTasks() >= threshold) {
+                return;
+            }
+            int claimBudget = properties.claim().maxClaimAttemptsPerCycle();
+            Set<Integer> owned = ownershipManager.ownedShardsSnapshot();
+            if (owned.isEmpty()) {
+                return;
+            }
+
+            String queue = properties.queue().defaultQueue();
+            Instant now = Instant.now();
+            for (int shardId : owned) {
+                for (int offset = 0; offset < properties.poll().maxBucketsPerShard(); offset++) {
+                    Instant bucket = BucketTimeUtil.bucketStart(
+                            now.minusSeconds((long) offset * properties.queue().bucketSizeSeconds()),
+                            properties.queue().bucketSizeSeconds()
+                    );
+
+                    List<Message> candidates = repository.pollReady(queue, shardId, bucket, properties.poll().batchSize());
+                    for (Message message : candidates) {
+                        if (claimBudget <= 0) {
+                            return;
+                        }
+                        metrics.incrementPolledMessages();
+                        claimEngine.tryClaimAndExecute(message, handler);
+                        claimBudget--;
+                    }
+                }
+            }
+        } finally {
+            metrics.recordPollLatency(java.time.Duration.ofNanos(System.nanoTime() - started));
         }
-        int claimBudget = properties.claim().maxClaimAttemptsPerCycle();
+    }
+
+    void runLagScanCycle() {
         Set<Integer> owned = ownershipManager.ownedShardsSnapshot();
         if (owned.isEmpty()) {
+            metrics.setQueueLagMillis(0);
             return;
         }
 
         String queue = properties.queue().defaultQueue();
         Instant now = Instant.now();
+        long maxLagMillis = 0;
         for (int shardId : owned) {
             for (int offset = 0; offset < properties.poll().maxBucketsPerShard(); offset++) {
                 Instant bucket = BucketTimeUtil.bucketStart(
                         now.minusSeconds((long) offset * properties.queue().bucketSizeSeconds()),
                         properties.queue().bucketSizeSeconds()
                 );
-
                 List<Message> candidates = repository.pollReady(queue, shardId, bucket, properties.poll().batchSize());
                 for (Message message : candidates) {
-                    if (claimBudget <= 0) {
-                        return;
-                    }
-                    metrics.incrementPolledMessages();
-                    claimEngine.tryClaimAndExecute(message, handler);
-                    claimBudget--;
+                    long lagMillis = Math.max(0, now.toEpochMilli() - message.createdTime().toEpochMilli());
+                    maxLagMillis = Math.max(maxLagMillis, lagMillis);
                 }
             }
         }
+        metrics.setQueueLagMillis(maxLagMillis);
     }
 }

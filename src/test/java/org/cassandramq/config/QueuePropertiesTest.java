@@ -31,6 +31,14 @@ class QueuePropertiesTest {
         assertThrows(IllegalArgumentException.class, () -> QueueProperties.from(p));
     }
 
+    @Test
+    void failsWhenLagScanIntervalIsNonPositive() {
+        Properties p = baseProperties();
+        p.setProperty("cassandramq.metrics.lag-scan-interval-seconds", "0");
+
+        assertThrows(IllegalArgumentException.class, () -> QueueProperties.from(p));
+    }
+
     private Properties baseProperties() {
         Properties p = new Properties();
         p.setProperty("cassandramq.cassandra.secure-connect-bundle-path", "/tmp/secure-connect-test-cluster.zip");

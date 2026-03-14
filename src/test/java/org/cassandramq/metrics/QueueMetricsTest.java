@@ -19,6 +19,7 @@ class QueueMetricsTest {
         metrics.incrementPolledMessages();
         metrics.setInflightTasks(5);
         metrics.setOwnedShards(3);
+        metrics.setQueueLagMillis(1200);
 
         assertEquals(1, metrics.claimed());
         assertEquals(1, metrics.completed());
@@ -30,6 +31,7 @@ class QueueMetricsTest {
         assertEquals(1, metrics.polledMessages());
         assertEquals(5, metrics.inflightTasks());
         assertEquals(3, metrics.ownedShards());
+        assertEquals(1200, metrics.queueLagMillis());
     }
 
     @Test
@@ -38,8 +40,10 @@ class QueueMetricsTest {
 
         metrics.setInflightTasks(-2);
         metrics.setOwnedShards(-1);
+        metrics.setQueueLagMillis(-5);
 
         assertEquals(0, metrics.inflightTasks());
         assertEquals(0, metrics.ownedShards());
+        assertEquals(0, metrics.queueLagMillis());
     }
 }

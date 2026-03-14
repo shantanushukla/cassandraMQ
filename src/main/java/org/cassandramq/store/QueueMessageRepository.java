@@ -10,7 +10,6 @@ import org.cassandramq.model.MessageStatus;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.nio.ByteBuffer;
 
 public final class QueueMessageRepository implements QueueMessageStore {
@@ -105,13 +104,6 @@ public final class QueueMessageRepository implements QueueMessageStore {
                 message.createdTime()
         );
         session.execute(bs);
-    }
-
-    public Optional<Message> fromRow(Row row) {
-        if (row == null) {
-            return Optional.empty();
-        }
-        return Optional.of(toMessage(row));
     }
 
     @Override

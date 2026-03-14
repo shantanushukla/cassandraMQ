@@ -54,7 +54,12 @@ public final class ExecutionPool {
 
         executor.execute(() -> {
             try {
-                handler.handle(message);
+                long started = System.nanoTime();
+                try {
+                    handler.handle(message);
+                } finally {
+                    metrics.recordHandlerLatency(java.time.Duration.ofNanos(System.nanoTime() - started));
+                }
                 repository.markCompleted(message, workerId);
                 metrics.incrementCompleted();
             } catch (Exception ex) {

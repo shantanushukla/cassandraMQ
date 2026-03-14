@@ -28,13 +28,18 @@ public final class TaskClaimEngine implements ClaimDispatcher {
 
     @Override
     public void tryClaimAndExecute(Message message, MessageHandler handler) {
-        Instant leaseExpiry = Instant.now().plus(properties.claim().taskLeaseDuration());
-        boolean claimed = repository.tryClaim(message, properties.queue().workerId(), leaseExpiry);
-        if (!claimed) {
-            metrics.incrementClaimFailures();
-            return;
+        long started = System.nanoTime();
+        try {
+            Instant leaseExpiry = Instant.now().plus(properties.claim().taskLeaseDuration());
+            boolean claimed = repository.tryClaim(message, properties.queue().workerId(), leaseExpiry);
+            if (!claimed) {
+                metrics.incrementClaimFailures();
+                return;
+            }
+            metrics.incrementClaimed();
+            executionPool.execute(message, handler);
+        } finally {
+            metrics.recordClaimLatency(java.time.Duration.ofNanos(System.nanoTime() - started));
         }
-        metrics.incrementClaimed();
-        executionPool.execute(message, handler);
     }
 }

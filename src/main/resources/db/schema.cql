@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS queue_messages_by_shard (
     retry_count INT,
     created_time TIMESTAMP,
     PRIMARY KEY ((queue_name, shard_id, bucket_time), message_id)
-);
+)
+WITH default_time_to_live = 259200;
 
 CREATE TABLE IF NOT EXISTS shard_ownership (
     queue_name TEXT,

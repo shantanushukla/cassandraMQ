@@ -147,6 +147,9 @@ public final class QueueProperties {
         requirePositive(execution.threadPoolSize(), "execution.thread-pool-size");
         requirePositive(retry.maxAttempts(), "retry.max-attempts");
         requirePositive(runtime.recoveryLookbackBuckets(), "runtime.recovery-lookback-buckets");
+        if (metrics.lagScanInterval().isZero() || metrics.lagScanInterval().isNegative()) {
+            throw new IllegalArgumentException("metrics.lag-scan-interval-seconds must be > 0");
+        }
         if (retry.jitterPercent() < 0 || retry.jitterPercent() > 100) {
             throw new IllegalArgumentException("retry.jitter-percent must be between 0 and 100");
         }
