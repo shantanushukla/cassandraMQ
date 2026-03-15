@@ -13,9 +13,12 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -36,7 +39,9 @@ public final class QueueThroughputHarness {
         int messages = Integer.parseInt(System.getProperty("cassandramq.perf.messages", "100000"));
         int producerInstances = Integer.parseInt(System.getProperty("cassandramq.perf.producers", "4"));
         int consumerInstances = Integer.parseInt(System.getProperty("cassandramq.perf.consumers", "4"));
-        int printEvery = Integer.parseInt(System.getProperty("cassandramq.perf.print-every", "1000"));
+        int printEvery = Integer.parseInt(System.getProperty("cassandramq.perf.print-every", "0"));
+        int sendRetries = Integer.parseInt(System.getProperty("cassandramq.perf.send-retries", "2"));
+        long sendRetryDelayMs = Long.parseLong(System.getProperty("cassandramq.perf.send-retry-delay-ms", "50"));
         long maxWaitSeconds = Long.parseLong(System.getProperty("cassandramq.perf.max-wait-seconds", "300"));
         int totalShards = Integer.parseInt(System.getProperty("cassandramq.perf.total-shards", "64"));
         String queue = System.getProperty(
@@ -57,6 +62,7 @@ public final class QueueThroughputHarness {
         AtomicLong lastSendNanos = new AtomicLong();
         AtomicLong firstProcessNanos = new AtomicLong();
         AtomicLong lastProcessNanos = new AtomicLong();
+        AtomicLong sendFailures = new AtomicLong();
 
         try {
             for (int i = 0; i < consumerInstances; i++) {
@@ -87,6 +93,7 @@ public final class QueueThroughputHarness {
             int base = messages / producerInstances;
             int extra = messages % producerInstances;
             int startIndex = 0;
+            List<Future<?>> producerFutures = new ArrayList<>();
             for (int i = 0; i < producerInstances; i++) {
                 QueueClientFactory.QueueClients producerClient = producers.get(i);
                 CassandraQueueProducer producer = producerClient.producer();
@@ -95,18 +102,34 @@ public final class QueueThroughputHarness {
                 startIndex += count;
                 int producerId = i;
 
-                producerPool.submit(() -> {
+                producerFutures.add(producerPool.submit(() -> {
                     for (int n = 0; n < count; n++) {
                         int globalId = from + n;
+                        sendWithRetry(
+                                producer,
+                                queue,
+                                ("perf-" + producerId + "-" + globalId).getBytes(StandardCharsets.UTF_8),
+                                sendRetries,
+                                sendRetryDelayMs,
+                                sendFailures
+                        );
                         long now = System.nanoTime();
                         firstSendNanos.compareAndSet(0L, now);
-                        producer.send(queue, ("perf-" + producerId + "-" + globalId).getBytes(StandardCharsets.UTF_8));
                         produced.incrementAndGet();
-                        lastSendNanos.set(System.nanoTime());
+                        lastSendNanos.set(now);
                     }
-                });
+                }));
             }
 
+            for (Future<?> future : producerFutures) {
+                try {
+                    future.get(maxWaitSeconds, TimeUnit.SECONDS);
+                } catch (ExecutionException e) {
+                    throw new IllegalStateException("Producer task failed", e.getCause());
+                } catch (TimeoutException e) {
+                    throw new IllegalStateException("Timed out waiting for producer task completion", e);
+                }
+            }
             producerPool.shutdown();
             if (!producerPool.awaitTermination(maxWaitSeconds, TimeUnit.SECONDS)) {
                 throw new IllegalStateException("Timed out waiting for producer tasks");
@@ -132,8 +155,8 @@ public final class QueueThroughputHarness {
             double retriedCounterSum = sumCounter(consumers, "cassandramq.retried.total");
 
             System.out.printf(
-                    "Produced: %d messages, throughput: %.2f msg/s%n",
-                    producedCount, produceThroughput
+                    "Produced: %d messages, throughput: %.2f msg/s, sendFailures=%d%n",
+                    producedCount, produceThroughput, sendFailures.get()
             );
             System.out.printf(
                     "Processed: %d/%d messages, throughput: %.2f msg/s, complete=%s%n",
@@ -214,11 +237,10 @@ public final class QueueThroughputHarness {
 
         if (printEvery > 0 && count % printEvery == 0) {
             System.out.printf(
-                    "[%s] processed #%d messageId=%s payload=%s%n",
+                    "[%s] processed #%d messageId=%s%n",
                     workerId,
                     count,
-                    message.messageId(),
-                    new String(message.payload(), StandardCharsets.UTF_8)
+                    message.messageId()
             );
         }
     }
@@ -237,6 +259,35 @@ public final class QueueThroughputHarness {
         } catch (Exception ignored) {
             // Ignore missing meters for harness reporting.
             return 0.0;
+        }
+    }
+
+    private static void sendWithRetry(
+            CassandraQueueProducer producer,
+            String queue,
+            byte[] payload,
+            int sendRetries,
+            long sendRetryDelayMs,
+            AtomicLong sendFailures
+    ) {
+        for (int attempt = 0; attempt <= sendRetries; attempt++) {
+            try {
+                producer.send(queue, payload);
+                return;
+            } catch (RuntimeException ex) {
+                if (attempt >= sendRetries) {
+                    sendFailures.incrementAndGet();
+                    throw ex;
+                }
+                if (sendRetryDelayMs > 0) {
+                    try {
+                        Thread.sleep(sendRetryDelayMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException("Interrupted during producer retry backoff", ie);
+                    }
+                }
+            }
         }
     }
 }
