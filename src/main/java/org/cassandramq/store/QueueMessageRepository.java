@@ -40,10 +40,15 @@ public final class QueueMessageRepository implements QueueMessageStore {
 
     @Override
     public List<Message> pollReady(String queueName, int shardId, Instant bucketTime, int limit) {
-        BoundStatement bs = statements.pollReadyMessages().bind(queueName, shardId, bucketTime, limit);
+        BoundStatement bs = statements.pollReadyMessages()
+                .bind(queueName, shardId, bucketTime)
+                .setPageSize(Math.max(1, limit));
         ResultSet rs = session.execute(bs);
         List<Message> out = new ArrayList<>();
         for (Row row : rs) {
+            if (out.size() >= limit) {
+                break;
+            }
             MessageStatus status = MessageStatus.valueOf(row.getString("status"));
             if (status == MessageStatus.READY || status == MessageStatus.RETRY) {
                 out.add(toMessage(row));
@@ -54,10 +59,15 @@ public final class QueueMessageRepository implements QueueMessageStore {
 
     @Override
     public List<Message> pollBucket(String queueName, int shardId, Instant bucketTime, int limit) {
-        BoundStatement bs = statements.pollReadyMessages().bind(queueName, shardId, bucketTime, limit);
+        BoundStatement bs = statements.pollReadyMessages()
+                .bind(queueName, shardId, bucketTime)
+                .setPageSize(Math.max(1, limit));
         ResultSet rs = session.execute(bs);
         List<Message> out = new ArrayList<>();
         for (Row row : rs) {
+            if (out.size() >= limit) {
+                break;
+            }
             out.add(toMessage(row));
         }
         return out;
@@ -72,11 +82,10 @@ public final class QueueMessageRepository implements QueueMessageStore {
                 message.queueName(),
                 message.shardId(),
                 message.bucketTime(),
-                message.messageId(),
-                message.status().name()
+                message.messageId()
         );
-        Row row = session.execute(bs).one();
-        return row != null && row.getBoolean("[applied]");
+        session.execute(bs);
+        return true;
     }
 
     @Override

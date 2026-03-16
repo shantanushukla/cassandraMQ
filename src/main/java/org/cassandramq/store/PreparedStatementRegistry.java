@@ -48,7 +48,6 @@ public final class PreparedStatementRegistry {
                         .whereColumn("queue_name").isEqualTo(bindMarker())
                         .whereColumn("shard_id").isEqualTo(bindMarker())
                         .whereColumn("bucket_time").isEqualTo(bindMarker())
-                        .limit(bindMarker())
                         .build());
 
         this.claimMessage = session.prepare(
@@ -60,7 +59,6 @@ public final class PreparedStatementRegistry {
                         .whereColumn("shard_id").isEqualTo(bindMarker())
                         .whereColumn("bucket_time").isEqualTo(bindMarker())
                         .whereColumn("message_id").isEqualTo(bindMarker())
-                        .ifColumn("status").isEqualTo(bindMarker())
                         .build());
 
         this.completeMessage = session.prepare(
