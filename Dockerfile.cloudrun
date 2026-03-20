@@ -1,0 +1,15 @@
+FROM eclipse-temurin:25-jdk
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends maven \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY pom.xml /app/pom.xml
+COPY src /app/src
+COPY scripts/run-throughput-harness.sh /app/scripts/run-throughput-harness.sh
+
+RUN chmod +x /app/scripts/run-throughput-harness.sh
+
+ENTRYPOINT ["/app/scripts/run-throughput-harness.sh"]

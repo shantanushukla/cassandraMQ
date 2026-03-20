@@ -1,0 +1,51 @@
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: cassandramq-throughput
+spec:
+  template:
+    template:
+      spec:
+        taskCount: 1
+        parallelism: 1
+        maxRetries: 0
+        timeoutSeconds: 1800
+        containers:
+          - image: us-east1-docker.pkg.dev/project-4ffcc502-26e1-4c0f-bff/mq-bench/cassandramq-throughput:latest
+            env:
+              - name: PERF_MESSAGES
+                value: "100"
+              - name: PERF_PRODUCERS
+                value: "2"
+              - name: PERF_CONSUMERS
+                value: "2"
+              - name: PERF_TOTAL_SHARDS
+                value: "16"
+              - name: PERF_PRINT_EVERY
+                value: "0"
+              - name: PERF_MAX_WAIT_SECONDS
+                value: "120"
+              - name: CASSANDRA_CONSISTENCY
+                value: "LOCAL_QUORUM"
+              - name: CASSANDRA_SECURE_CONNECT_BUNDLE_PATH
+                value: "/secrets/secure-connect-bundle.zip"
+              - name: CASSANDRA_CLIENT_ID
+                valueFrom:
+                  secretKeyRef:
+                    name: cassandra-client-id
+                    key: latest
+              - name: CASSANDRA_CLIENT_SECRET
+                valueFrom:
+                  secretKeyRef:
+                    name: cassandra-client-secret
+                    key: latest
+            volumeMounts:
+              - name: secure-connect-bundle
+                mountPath: /secrets
+        volumes:
+          - name: secure-connect-bundle
+            secret:
+              secretName: cassandra-secure-connect-bundle
+              items:
+                - key: latest
+                  path: secure-connect-bundle.zip
